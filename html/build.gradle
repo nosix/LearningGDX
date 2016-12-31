@@ -1,68 +1,51 @@
-apply plugin: "java"
-apply plugin: "jetty"
-
-gwt {
-    gwtVersion='2.8.0' // Should match the gwt version used for building the gwt backend
-    maxHeapSize="1G" // Default 256m is not enough for gwt compiler. GWT is HUNGRY
-    minHeapSize="1G"
-
-    src = files(file("src/")) // Needs to be in front of "modules" below.
-    modules 'org.anyspirit.learning.gdx.GdxDefinition'
-    devModules 'org.anyspirit.learning.gdx.GdxDefinitionSuperdev'
-    project.webAppDirName = 'webapp'
-
-    compiler {
-        strict = true;
-        disableCastChecking = true;
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        jcenter()
+    }
+    dependencies {
+        classpath "com.dragome:dragome-web:0.96-beta4"
+        classpath "com.dragome:dragome-bytecode-js-compiler:0.96-beta4"
+        classpath "com.dragome:dragome-js-jre:0.96-beta4"
     }
 }
 
-task draftRun(type: JettyRunWar) {
-    dependsOn draftWar
-    dependsOn.remove('war')
-    webApp=draftWar.archivePath
-    daemon=true
-}
-
-task superDev(type: de.richsource.gradle.plugins.gwt.GwtSuperDev) {
-    dependsOn draftRun
-    doFirst {
-    	gwt.modules = gwt.devModules
-    }
-}
-
-task dist(dependsOn: [clean, compileGwt]) {
-    doLast {
-        file("build/dist").mkdirs()
-        copy {
-            from "build/gwt/out"
-            into "build/dist"
-        }
-        copy {
-            from "webapp"
-            into "build/dist"
-            }
-        copy {
-            from "war"
-            into "build/dist"
-        }
-    }
-}
-
-draftWar {
-   from "war"
-}
-
-task addSource << {
-	sourceSets.main.compileClasspath += files(project(':core').sourceSets.main.allJava.srcDirs)
-}
-
-tasks.compileGwt.dependsOn(addSource)
-tasks.draftCompileGwt.dependsOn(addSource)
-
-sourceCompatibility = 1.6
+sourceCompatibility = 1.8
 sourceSets.main.java.srcDirs = [ "src/" ]
 
+project.ext.assetsDir = new File("../android/assets")
+
+task compileClient(type: JavaExec) {
+    // debug: gradle html:compileClient --debug-jvm
+
+    def destinationDirectory = "build/webapp"
+    def webappDirectory = "webapp"
+    def removeCache = true
+    def forceRebuild = true
+    def compress = false
+
+    main = 'com.dragome.web.helpers.serverside.StandaloneDragomeAppGenerator'
+    classpath = sourceSets.main.runtimeClasspath
+    args = [destinationDirectory, webappDirectory, removeCache, forceRebuild, compress]
+
+    doLast {
+        copy {
+            from project.assetsDir
+            into destinationDirectory + "/assets"
+        }
+    }
+}
+
+war {
+    webAppDirName = "build/webapp"
+    webInf { from "webapp/WEB-INF" }
+}
+
+tasks.war.dependsOn(compileClient)
+tasks.jettyRun.dependsOn(compileClient)
+tasks.jettyRunWar.enabled = false
 
 eclipse.project {
     name = appName + "-html"
